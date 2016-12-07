@@ -1,3 +1,6 @@
+#SERVICE PAGE OF SHINY APP
+
+#loading libraries
 library(shiny)
 library(ggplot2)
 library(ggmap)
@@ -5,41 +8,26 @@ library(dplyr)
 library(lubridate)
 library(stringr)
 library(gridExtra)
+library(wordcloud)
 
 shinyServer(function(input, output) {
 
-  #save(data1, change, change1, servicerequest, file = "finalprojectdata.rda")
-  load("finalprojectdata.rda")
-  
-  servicerequest$Month = month(servicerequest$CreatedDate)
-  servicerequest$Day = wday(servicerequest$CreatedDate, label = TRUE)
-
-  #change = data1 %>%
-  #filter(!is.na(Year)) %>%
-    #group_by(Year, Call.Resolution) %>%
-    #summarize(count = n()) %>%
-    #mutate(percent = round(count/sum(count),3))
-  
-  #change1 = change %>%
-    #mutate(colorcode = 
-     #        ifelse(Call.Resolution == "Transfer (City)" | Call.Resolution == "Referred To County" |
-      #                Call.Resolution == "Warm Transfer (City)" | Call.Resolution == "Got Voicemail (City)" | 
-       #               Call.Resolution == "Referred To State" | Call.Resolution == "Line Busy (City)", "Decreasing", 
-        #            ifelse(Call.Resolution == "Service Request Processed" | Call.Resolution == "Gave Caller Information", "Increasing", "Constrant")))
-
-  
+  #loading the rda file with the cleaned, transformed datasets
+  load("FinalData1.rda")
+ 
 ## -----------------------------------    
-## CURRENT TRENDS
+## PANEL: CURRENT TRENDS
 ## -----------------------------------  
 
+# BUTTON (OVERALL TREND) --------------------------------------
   
-# BUTTON EVENT (OVERALL TREND) --------------------------------------
-  
+  #subsetting data to include only top 6 request types
   Year2016_1 = reactive({
     servicerequest %>%
       filter(RequestSource %in% c("Call", "Mobile App", "Driver Self Report", "Email", "Self Service")) %>%
       filter(Year == 2016)})
   
+  #plotting distribution of calls in 2016
   observeEvent(input$button1, {
     output$p2_1 = renderPlot({
       ggplot(Year2016_1(), aes(x = RequestType, fill = RequestSource)) +
@@ -51,7 +39,7 @@ shinyServer(function(input, output) {
         ggtitle("Distribution of Calls in 2016")})
   }) #END OF BUTTON
   
-# SLIDER EVENT (TO CHOOSE MONTH) --------------------------------------  
+# SLIDER EVENT (CHOOSE MONTH) --------------------------------------  
   observeEvent(input$slider1, {
     
     Year2016 = reactive({
@@ -625,25 +613,18 @@ shinyServer(function(input, output) {
     
       
     })
-  
- 
-  
-  #-----------------------------
-  #HEAT MAPS - END
-  #-----------------------------  
-  
-  
+
   
   #-----------------------------------------
   #TOP 6 REQUEST TYPES BY REQUEST SOURCE
   #-----------------------------------------
 
+  #loading package to process images
   if (!require("pacman")) install.packages("pacman")
   pacman::p_load(jpeg, png, ggplot2, grid, neuropsychology)
   
   
   #subsetting dataset
-  
   bulky <- servicerequest %>%
     filter(RequestType == "Bulky Items") %>%
     group_by(RequestSource) %>%
@@ -687,8 +668,7 @@ shinyServer(function(input, output) {
     slice(1:5)
   
   
-  #loading images
-  
+  #loading images for background
   image_graffiti <- jpeg::readJPEG("Picture1.jpg")
   image_bulky <- jpeg::readJPEG("Picture2.jpg")
   image_dumping <- jpeg::readJPEG("Picture3.jpg")
@@ -696,11 +676,8 @@ shinyServer(function(input, output) {
   image_waste <- jpeg::readJPEG("Picture5.jpg")
   image_animal <- jpeg::readJPEG("Picture6.jpg")
   
-  #plotting graphs on images
   
-  
-  #bulky items
-  
+  #plots
   observeEvent(input$select_0, {
     
     output$p2_2 = renderPlot({
@@ -822,11 +799,27 @@ shinyServer(function(input, output) {
     
     
   })
+
+
+### BOXPLOTS (to show median time taken to service a request)
   
+  #new variable created to measure time difference between UpdatedDate and CreatedDate
+  servicerequest1 <- servicerequest %>%
+    mutate(TimeDiff = round(difftime(servicerequest$UpdatedDate, servicerequest$CreatedDate, units = "mins"),2))
   
-  
-  
-  #end of graphs
+  servicerequest1$TimeDiff = round((servicerequest1$TimeDiff)/(24*60),2)
+
+#plot  
+  output$p2_4 = renderPlot({
+    servicerequest1 %>%
+      group_by(RequestType) %>%
+      ggplot(aes(x = RequestType, y = as.numeric(TimeDiff))) +
+      geom_boxplot(color = "black", fill = "lightblue") +
+      coord_cartesian(ylim = c(0,40)) +
+      theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+      xlab("Request Types") +
+      ylab("Time (Days)")
+  })
   
   
   
@@ -834,13 +827,14 @@ shinyServer(function(input, output) {
   #                 HISTORICAL DATA - PANEL
   #-------------------------------------------------------------
   
+  #subsetting data
   count_dept = data1 %>%
     group_by(Department.Abbreviation) %>%
     summarise(count = n()) %>%
     filter(Department.Abbreviation != "") %>%
     arrange(desc(count))
   
-  
+  #plot
   output$p1_1 = renderPlot({
     count_dept %>%
       filter(count>10000) %>%
@@ -851,7 +845,7 @@ shinyServer(function(input, output) {
       ylab("Number of Calls") +
       ggtitle("Call Requests by Department")})
   
-  
+  #plot
   output$p1_2 = renderPlot({
       ggplot(change1, aes(x = reorder(Call.Resolution, percent), y = percent*100, fill = colorcode)) +
       geom_bar(stat = "identity") +
@@ -862,8 +856,6 @@ shinyServer(function(input, output) {
       coord_flip() +
       scale_fill_manual(name = "Changing Trend", values = c("lightblue", "blue", "red"))})
   
-  
-  ##############NEW
   
   count_dept_year = data1 %>%
     group_by(Department.Name, Year, Department.Abbreviation) %>%
@@ -884,9 +876,7 @@ shinyServer(function(input, output) {
       guides(fill = guide_legend(title = "Year"))
   })
 
-  ####TULSI
-  
-  
+
   referData <- subset(data1, data1$Call.Resolution %in% c('Referred To 411', 'Referred To County', 'Referred To Other Governmental', 'Referred To State'))
   referData$ResolveRefer = 'Referred' 
   resolveData <- subset(data1, data1$Call.Resolution %in% c('Gave Caller Information', 'Service Request Processed'))
@@ -930,7 +920,23 @@ shinyServer(function(input, output) {
   #newDataBind$Date <- mdy(newDataBind$Date)
   #newDataBind$Month <- month(newDataBind$Date, label = T)
   #newDataBind$Year <- year(newDataBind$Date)
+
+  data1$Month = month(data1$Date, label = T)
   
+  monthData <- data1 %>%
+    filter(Month != 'NA') %>%
+    group_by(Year, Month) %>%
+    filter(Year != "2015") %>%
+    summarise(count = n())
+  
+  output$p1_6 = renderPlot({
+    ggplot(monthData, aes(x = Month, y = count, group = Year, color = factor(Year))) +
+      geom_line() +
+      scale_color_manual(values = c("blue", "red", "green", "yellow", "black")) +
+      xlab("Month") +
+      ylab("Number of Calls") +
+      ggtitle("Call Distribution by Month and Year")
+  })
   
   
   output$p1_5 = renderPlot({
@@ -943,24 +949,19 @@ shinyServer(function(input, output) {
       ggtitle("Percentage of Resolved Calls")
   })
   
-  
-  
-  
-  
-  
-  
 
 # ------------------------------------
 #       GEOGRAPHIC TRENDS
 # ------------------------------------
   
   #loading map
-  
   map = qmap("Los Angeles", maptype = "roadmap")
   
   top_bulky <- servicerequest %>%
     filter(ZipCode %in% c("91331", "90011", "90026", "91342",
                           "90044", "90003", "90042", "90019", "90037", "91335"))
+  
+  #plotting points over LA map
   t1 <- map +
     stat_bin2d(data = top_bulky, aes(x = Longitude, y = Latitude),
                bins = 100, alpha = 0.5) +
@@ -1021,6 +1022,216 @@ shinyServer(function(input, output) {
 
   })
 
+  #COUNCIL DISTRICT - GEOGRAPHIC TRENDS
   
-  })#end of fluid page
+  #plottong points over map
+  cd1 <- map +
+    geom_point(data = cd_1, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 1")
+  
+  cd2 <- map +
+    geom_point(data = cd_2, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 2")
+  
+  cd3 <- map +
+    geom_point(data = cd_3, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 3")
+  
+  cd4 <- map +
+    geom_point(data = cd_4, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 4")
+  
+  cd5 <- map +
+    geom_point(data = cd_5, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 5")
+  
+  cd6 <- map +
+    geom_point(data = cd_6, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 6")
+  
+  cd7 <- map +
+    geom_point(data = cd_7, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 7")
+  
+  cd8 <- map +
+    geom_point(data = cd_8, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 8")
+  
+  cd9 <- map +
+    geom_point(data = cd_9, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 9")
+  
+  cd10 <- map +
+    geom_point(data = cd_10, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 10")
+  
+  cd11 <- map +
+    geom_point(data = cd_11, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 11")
+  
+  cd12 <- map +
+    geom_point(data = cd_12, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 12")
+  
+  cd13 <- map +
+    geom_point(data = cd_13, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 13")
+  
+  cd14 <- map +
+    geom_point(data = cd_14, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 14")
+  
+  cd15 <- map +
+    geom_point(data = cd_15, aes(x = Longitude, y = Latitude),
+               color = "blue", alpha = 0.01) +
+    ggtitle("Council District 15")
+  
+  
+  output$p3_3 = renderPlot({
+    grid.arrange(cd1, cd2, cd3, cd4, cd5,
+                 cd6, cd7, cd8, cd9, cd10,
+                 cd11, cd12, cd13, cd14, cd15,
+                 nrow = 3)
+
+    
+    cdData <- servicerequest %>%
+      group_by(CD, RequestType) %>%
+      summarise(count = n()) %>%
+      arrange(CD, -count)
+    
+    #filtering for top 6 request types
+    cdDataFilter <- subset(cdData, cdData$RequestType %in% c('Bulky Items', 'Graffiti Removal', 'Metal/Household Appliances',
+                                                             'Illegal Dumping Pickup', 'Electronic Waste', 'Dead Animal Removal')  & CD!='NA')
+    
+    #plot
+    output$p3_2 = renderPlot({
+      ggplot(cdDataFilter, aes(x = factor(CD), y = count, fill = factor(CD))) +
+        geom_bar(stat = "identity", show.legend = FALSE) +
+        facet_wrap(~RequestType, ncol = 3) +
+        xlab("Council District") +
+        ylab("Number of Requests") +
+        theme_classic()
+    })
+  
+    
+  })
+  
+  
+  ## -----------------------------------    
+  ## MAIN PAGE
+  ## -----------------------------------    
+  
+  #wordcloud #1
+  
+  #  y <- data1 %>%
+  #   group_by(Department.Abbreviation) %>%
+  #  summarise(count = n()) %>%
+  #  filter(Department.Abbreviation != "")
+  
+  #words = y$Department.Abbreviation
+  #freq = y$count
+  #d <- data.frame(word = words, freq = freq)
+  
+  #pal <- brewer.pal(9, "Set1")
+  #pal <- pal[(1:5)]
+  
+  
+  #output$p0_1 = renderPlot(
+  # wordcloud(d$word,d$freq, random.order = FALSE, random.color = FALSE, colors = pal) 
+  #)
+  
+  #wordcloud #2
+  
+  # Service Name
+  #wc1 <- servicerequest %>%
+  # group_by(RequestType) %>%
+  # summarise(count = n())
+  
+  #wc1_1 <- data.frame(word = wc1$RequestType, freq = wc1$count)
+  
+  #pal1 <- brewer.pal(9, "BuPu")
+  #pal1 <- pal1[-(1:5)]
+  
+  #levels(wc1_1$word)
+  
+  #output$p0_2 = renderPlot(
+  # wordcloud(wc1_1$word,wc1_1$freq,colors = pal1, random.color = FALSE)
+  #)
+  
+  # wordcloud #3
+  
+  #wc2 <- servicerequest %>%
+  #  group_by(RequestSource) %>%
+  # summarise(count = n())
+  
+  #wc2_1 <- data.frame(word = wc2$RequestSource, freq = wc2$count)
+  
+  #pal2 <- brewer.pal(9, "YlGnBu")
+  #pal2 <- pal2[-(1:3)]
+  
+  #levels(wc1_1$word)
+  
+  #wordcloud(wc2_1$word,wc2_1$freq,colors = pal2, random.color = FALSE)
+  
+  
+  # worldcloud #4
+  #wc3 <- servicerequest %>%
+  #  group_by(ZipCode) %>%
+  # summarise(count = n())
+  
+  #wc3_1 <- data.frame(word = wc3$ZipCode, freq = wc3$count)
+  
+  #pal3 <- brewer.pal(9, "PuBuGn")
+  #pal3 <- pal3[-(1:3)]
+  
+  #levels(wc1_1$word)
+  
+  #wordcloud(wc3_1$word,wc3_1$freq,colors = pal3, random.color = FALSE, scale = c(2, 0.5))
+  
+  # worldcloud #5
+  # Police Precinct
+  #wc4 <- servicerequest %>%
+  # group_by(PolicePrecinct) %>%
+  #summarise(count = n())
+  
+  #wc4_1 <- data.frame(word = wc4$PolicePrecinct, freq = wc4$count)
+  
+  #pal4 <- brewer.pal(9, "RdPu")
+  #pal4 <- pal[-(4:6)]
+  
+  
+  #wordcloud(wc4_1$word,wc4_1$freq,colors = pal4, random.color = FALSE, scale = c(1,0.5))
+  
+  # worldcloud #6
+  # CALL RESOLUTION
+  
+  #wc5 <- data1 %>%
+  #group_by(Call.Resolution) %>%
+  #summarise(count = n())
+  
+  #wc5_1 <- data.frame(word = wc5$Call.Resolution, freq = wc5$count)
+  
+  #display.brewer.pal(9, "RdYlBu")
+  #pal5 <- brewer.pal(9, "RdYlBu")
+  #pal5 <- pal[-(5:6)]
+  
+  
+  #wordcloud(wc5_1$word,wc5_1$freq,colors = pal5, random.color = FALSE, scale = c(1,0.5))
+  
+  
+}) #end of fluid page
   
